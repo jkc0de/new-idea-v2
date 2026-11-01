@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <title>Your booking</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <main class="narrow" style="padding-top:32px">
+    <div id="error" class="error hidden" role="alert"></div>
+    <div id="view"><p class="muted">Loading…</p></div>
+  </main>
+  <script src="/static/common.js"></script>
+  <script>
+    const params = new URLSearchParams(location.search);
+    const ref = params.get('ref') || '';
+    const token = params.get('token') || '';
+    const slug = location.pathname.split('/')[2];
+    const view = document.getElementById('view');
+    const errBox = document.getElementById('error');
+    const showError = (m) => { errBox.textContent = m; errBox.classList.toggle('hidden', !m); };
+
+    async function load() {
+      try {
+        const { appointment: a, business: b, canCancel } = await api(`/api/public/booking/${encodeURIComponent(ref)}?token=${encodeURIComponent(token)}`);
+        document.title = `Your booking — ${b.name}`;
+        const cancelBtn = h('button.btn-danger', { type: 'button', onclick: async () => {
+          if (!confirm('Cancel this appointment?')) return;
+          cancelBtn.disabled = true;
+          try { await api(`/api/public/booking/${encodeURIComponent(ref)}/cancel`, { method: 'POST', body: { token } }); toast('Booking cancelled'); load(); }
+          catch (e) { showError(e.message); cancelBtn.disabled = false; }
+        } }, 'Cancel appointment');
+        view.replaceChildren(h('div.card',
+          h('p.muted.small', b.name),
+          h('h1', a.serviceName),
+          h('p', h('span.badge', { class: a.status }, STATUS_LABEL[a.status])),
+          h('p', h('strong', fmtDateLong(a.date)), h('br'), `${fmtTime(a.startMin)} – ${fmtTime(a.endMin)} with ${a.therapistName}`),
+          h('p.small.muted', `Reference ${a.ref} · ${fmtMoney(a.priceCents, b.currency)}`),
+          b.address ? h('p.small', b.address) : null,
+          a.status === 'booked' && canCancel ? cancelBtn : null,
+          a.status === 'booked' && !canCancel
+            ? h('p.small.muted', `Online cancellation closes ${b.cancelCutoffHours} hours before your appointment.${b.phone ? ` Call ${b.phone} for changes.` : ''}`) : null,
+          h('p', { style: 'margin-top:16px' }, h('a', { href: `/b/${encodeURIComponent(slug)}` }, 'Book another appointment'))));
+      } catch (e) {
+        view.replaceChildren();
+        showError(e.status === 404 ? 'We couldn’t find that booking. Check the link from your confirmation.' : e.message);
+      }
+    }
+    load();
+  </script>
+</body>
+</html>

@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Restful — Booking for Massage Studios</title>
+  <link rel="stylesheet" href="/static/styles.css">
+  <style>
+    .hero { padding: 56px 0 32px; display: grid; grid-template-columns: 1.2fr 1fr; gap: 40px; align-items: start; }
+    .hero h1 { font-size: 2.4rem; }
+    .lead { font-size: 1.1rem; color: var(--muted); }
+    .features { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; padding: 24px 0 56px; }
+    .features h3 { margin-bottom: .3em; }
+    .tabs { display: flex; gap: 4px; background: var(--surface-2); padding: 4px; border-radius: 10px; margin-bottom: 16px; }
+    .tabs button { flex: 1; border: 0; background: transparent; }
+    .tabs button[aria-selected="true"] { background: var(--surface); box-shadow: var(--shadow); font-weight: 600; }
+    ul.ticks { padding-left: 1.2em; } ul.ticks li { margin: .3em 0; }
+    @media (max-width: 800px) { .hero { grid-template-columns: 1fr; padding-top: 28px; gap: 24px; } .hero h1 { font-size: 1.8rem; } }
+  </style>
+</head>
+<body>
+  <header class="topbar"><div class="wrap">
+    <a class="brand" href="/"><span class="brand-dot"></span>Restful</a>
+    <a class="btn btn-sm" href="/b/serenity">See a demo booking page</a>
+  </div></header>
+
+  <main class="wrap">
+    <section class="hero">
+      <div>
+        <h1>Online booking built for massage therapists.</h1>
+        <p class="lead">Give clients a simple page to book any therapist, any service, 24/7. You get a calm dashboard for your schedule, staff and clients.</p>
+        <ul class="ticks">
+          <li>Real-time availability, no double bookings</li>
+          <li>Cleanup buffers between sessions</li>
+          <li>Per-therapist hours, services and time off</li>
+          <li>Clients can cancel online within your policy</li>
+        </ul>
+      </div>
+
+      <div class="card" id="auth">
+        <div class="tabs" role="tablist">
+          <button role="tab" aria-selected="true" data-tab="signup">Create account</button>
+          <button role="tab" aria-selected="false" data-tab="login">Log in</button>
+        </div>
+        <div class="error hidden" id="auth-error"></div>
+
+        <form id="signup-form">
+          <div class="field"><label for="s-name">Business name</label><input id="s-name" name="businessName" required placeholder="e.g. Harmony Massage"></div>
+          <div class="field"><label for="s-email">Email</label><input id="s-email" name="email" type="email" required autocomplete="email"></div>
+          <div class="field"><label for="s-pass">Password</label><input id="s-pass" name="password" type="password" minlength="8" required autocomplete="new-password" placeholder="At least 8 characters"></div>
+          <button class="btn-primary btn-block" type="submit">Start free</button>
+        </form>
+
+        <form id="login-form" class="hidden">
+          <div class="field"><label for="l-email">Email</label><input id="l-email" name="email" type="email" required autocomplete="email"></div>
+          <div class="field"><label for="l-pass">Password</label><input id="l-pass" name="password" type="password" required autocomplete="current-password"></div>
+          <button class="btn-primary btn-block" type="submit">Log in</button>
+          <p class="small muted" style="margin-top:12px">Demo: demo@serenity.test / demo1234 (after running <code>npm run seed</code>)</p>
+        </form>
+      </div>
+    </section>
+
+    <section class="features">
+      <div class="card"><h3>Your booking page</h3><p class="muted small">Share one link on your website, Instagram or Google profile. Clients pick a service, therapist and time in under a minute.</p></div>
+      <div class="card"><h3>Daily schedule</h3><p class="muted small">See every therapist's day side by side. Add walk-ins and phone bookings, mark visits completed or no-show.</p></div>
+      <div class="card"><h3>Client records</h3><p class="muted small">Visit history and private notes (pressure preferences, injuries, allergies) in one place.</p></div>
+      <div class="card"><h3>Your rules</h3><p class="muted small">Set how far ahead clients can book, minimum notice, and your cancellation cutoff.</p></div>
+    </section>
+  </main>
+
+  <script src="/static/common.js"></script>
+  <script>
+    const err = document.getElementById('auth-error');
+    const forms = { signup: document.getElementById('signup-form'), login: document.getElementById('login-form') };
+    document.querySelectorAll('[data-tab]').forEach((b) => b.addEventListener('click', () => {
+      document.querySelectorAll('[data-tab]').forEach((x) => x.setAttribute('aria-selected', String(x === b)));
+      for (const [k, f] of Object.entries(forms)) f.classList.toggle('hidden', k !== b.dataset.tab);
+      err.classList.add('hidden');
+    }));
+    if (location.hash === '#login') document.querySelector('[data-tab="login"]').click();
+
+    async function submit(form, path, extra = {}) {
+      const btn = form.querySelector('button[type=submit]');
+      btn.disabled = true; err.classList.add('hidden');
+      try {
+        await api(path, { method: 'POST', body: { ...formData(form), ...extra } });
+        location.href = '/admin';
+      } catch (e) {
+        err.textContent = e.message; err.classList.remove('hidden');
+      } finally { btn.disabled = false; }
+    }
+    forms.signup.addEventListener('submit', (e) => { e.preventDefault(); submit(forms.signup, '/api/auth/signup', { timezone: Intl.DateTimeFormat().resolvedOptions().timeZone }); });
+    forms.login.addEventListener('submit', (e) => { e.preventDefault(); submit(forms.login, '/api/auth/login'); });
+    api('/api/me').then(() => { location.href = '/admin'; }).catch(() => {});
+  </script>
+</body>
+</html>

@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Dashboard — Restful</title>
+  <link rel="stylesheet" href="/static/styles.css">
+  <style>
+    .nav { display: flex; gap: 4px; overflow-x: auto; padding: 10px 0; scrollbar-width: none; }
+    .nav button { border: 0; background: transparent; white-space: nowrap; color: var(--muted); }
+    .nav button[aria-current="page"] { background: var(--accent-soft); color: var(--accent-strong); font-weight: 600; }
+    .top-actions { display: flex; gap: 8px; align-items: center; flex: none; }
+    .page { padding-top: 20px; padding-bottom: 60px; }
+    .page-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+    .page-head h1 { margin: 0; }
+    .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 20px; }
+    .stat { padding: 14px 16px; }
+    .stat .v { font-size: 1.5rem; font-weight: 700; }
+    .stat .l { color: var(--muted); font-size: .82rem; }
+    .daynav { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .daynav input { width: auto; }
+
+    /* day grid */
+    .grid-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
+    .grid { display: grid; min-width: 100%; position: relative; }
+    .grid-head { position: sticky; top: 0; background: var(--surface); z-index: 3; border-bottom: 1px solid var(--border); padding: 10px 8px; font-weight: 600; font-size: .9rem; text-align: center; }
+    .gutter { position: relative; border-right: 1px solid var(--border); }
+    .gutter span { position: absolute; right: 6px; transform: translateY(-50%); font-size: .72rem; color: var(--muted); }
+    .col { position: relative; border-right: 1px solid var(--border); }
+    .col:last-child { border-right: 0; }
+    .col .hourline { position: absolute; left: 0; right: 0; border-top: 1px solid var(--border); opacity: .6; }
+    .col .closed { position: absolute; left: 0; right: 0; background: repeating-linear-gradient(135deg, var(--surface-2), var(--surface-2) 6px, transparent 6px, transparent 12px); }
+    .col .off { position: absolute; left: 2px; right: 2px; background: var(--warn-soft); border-radius: 6px; font-size: .72rem; padding: 2px 6px; color: var(--muted); overflow: hidden; }
+    .appt {
+      position: absolute; left: 4px; right: 4px; border-radius: 8px; padding: 4px 8px; font-size: .78rem; overflow: hidden; cursor: pointer;
+      background: var(--accent-soft); border: 1px solid var(--accent); border-left-width: 4px; color: var(--text); text-align: left; display: block;
+    }
+    .appt b { display: block; font-size: .8rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .appt.completed { background: var(--surface-2); border-color: var(--muted); }
+    .appt.no_show { background: var(--warn-soft); border-color: #c9962e; }
+    .appt.cancelled { opacity: .45; text-decoration: line-through; background: transparent; border-style: dashed; }
+    .now-line { position: absolute; left: 0; right: 0; border-top: 2px solid var(--danger); z-index: 2; pointer-events: none; }
+
+    .hours-row { display: grid; grid-template-columns: 110px 1fr 1fr; gap: 8px; align-items: center; margin-bottom: 6px; }
+    .hours-row input[type=time]:disabled { opacity: .4; }
+    .svc-checks { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 6px; }
+    .section-title { margin: 18px 0 8px; font-size: .95rem; }
+    .link-box { display: flex; gap: 8px; }
+    .link-box input { font-family: ui-monospace, Menlo, monospace; font-size: .85rem; }
+    .date-group { margin: 18px 0 6px; font-weight: 700; }
+    @media (max-width: 600px) { .brand span:last-child { font-size: .95rem; } .top-actions .btn { display: none; } .hours-row { grid-template-columns: 90px 1fr 1fr; } .link-box { flex-direction: column; } }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="wrap">
+      <a class="brand" href="/admin"><span class="brand-dot"></span><span id="biz-name">Restful</span></a>
+      <div class="top-actions">
+        <a class="btn btn-sm" id="view-page" target="_blank" rel="noopener">Booking page ↗</a>
+        <button class="btn-sm btn-ghost" id="logout">Log out</button>
+      </div>
+    </div>
+    <div class="wrap"><nav class="nav" id="nav" aria-label="Sections">
+      <button data-page="schedule">Schedule</button>
+      <button data-page="appointments">Appointments</button>
+      <button data-page="therapists">Therapists</button>
+      <button data-page="services">Services</button>
+      <button data-page="clients">Clients</button>
+      <button data-page="settings">Settings</button>
+    </nav></div>
+  </header>
+  <main class="wrap page" id="page"></main>
+  <dialog id="modal"></dialog>
+  <script src="/static/common.js"></script>
+  <script src="/static/admin.js"></script>
+</body>
+</html>

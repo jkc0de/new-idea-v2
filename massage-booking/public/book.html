@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Book an appointment</title>
+  <link rel="stylesheet" href="/static/styles.css">
+  <style>
+    .biz-head { padding: 28px 0 8px; }
+    .biz-head h1 { margin-bottom: .2em; }
+    .steps { display: flex; gap: 6px; margin: 16px 0 20px; }
+    .steps span { flex: 1; height: 4px; border-radius: 4px; background: var(--border); }
+    .steps span.on { background: var(--accent); }
+    .choice {
+      width: 100%; text-align: left; display: flex; justify-content: space-between; align-items: center; gap: 12px;
+      padding: 14px 16px; margin-bottom: 10px; border-radius: var(--radius); background: var(--surface);
+    }
+    .choice .meta { color: var(--muted); font-size: .88rem; }
+    .choice .price { font-weight: 700; white-space: nowrap; }
+    .choice small { display: block; color: var(--muted); font-weight: 400; margin-top: 2px; }
+    .days { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(64px, 1fr); gap: 8px; overflow-x: auto; padding-bottom: 6px; scrollbar-width: thin; }
+    .day { flex-direction: column; padding: 10px 4px; gap: 0; }
+    .day b { font-size: 1.15rem; }
+    .day .dow, .day .avail { font-size: .75rem; color: var(--muted); }
+    .day[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .day[aria-pressed="true"] .dow, .day[aria-pressed="true"] .avail { color: #e8f2ec; }
+    .slots { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 8px; margin-top: 16px; }
+    .slot { padding: .65em 0; }
+    .summary { background: var(--surface-2); border-radius: var(--radius); padding: 14px 16px; margin-bottom: 16px; }
+    .summary div { display: flex; justify-content: space-between; gap: 12px; padding: 2px 0; }
+    .back { margin-bottom: 12px; padding-left: 0; }
+    .done-icon { width: 56px; height: 56px; border-radius: 50%; background: var(--accent-soft); color: var(--accent-strong); display: grid; place-items: center; font-size: 28px; margin-bottom: 12px; }
+    .ref { font-family: ui-monospace, Menlo, monospace; font-size: 1.2rem; letter-spacing: .05em; }
+    footer { padding: 40px 0; text-align: center; }
+  </style>
+</head>
+<body>
+  <main class="narrow">
+    <div class="biz-head" id="biz"></div>
+    <div class="steps" id="steps" aria-hidden="true"><span></span><span></span><span></span><span></span></div>
+    <div id="error" class="error hidden" role="alert"></div>
+    <section id="view" aria-live="polite"></section>
+    <footer class="small muted">Powered by Restful</footer>
+  </main>
+  <script src="/static/common.js"></script>
+  <script src="/static/book.js"></script>
+</body>
+</html>
