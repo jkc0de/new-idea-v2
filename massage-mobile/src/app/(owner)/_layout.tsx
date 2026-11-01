@@ -8,6 +8,7 @@ import { useColors } from '@/lib/theme';
 
 const TABS: { name: string; title: string; icon: IconName; iconOn: IconName }[] = [
   { name: 'index', title: 'Today', icon: 'today-outline', iconOn: 'today' },
+  { name: 'schedule', title: 'Schedule', icon: 'grid-outline', iconOn: 'grid' },
   { name: 'bookings', title: 'Bookings', icon: 'calendar-outline', iconOn: 'calendar' },
   { name: 'clients', title: 'Clients', icon: 'people-outline', iconOn: 'people' },
   { name: 'more', title: 'Studio', icon: 'storefront-outline', iconOn: 'storefront' },

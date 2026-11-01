@@ -36,7 +36,10 @@ export async function setToken(t: string | null) {
 }
 
 export class ApiError extends Error {
-  constructor(message: string, public status: number) { super(message); }
+  /** Extra fields from the server, e.g. { issues: [...], canOverride: true } on scheduling conflicts. */
+  data: any;
+  constructor(message: string, public status: number, data: any = {}) { super(message); this.data = data; }
+  get canOverride(): boolean { return this.status === 409 && !!this.data?.canOverride; }
 }
 
 type Method = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
@@ -58,7 +61,7 @@ export async function api<T = any>(path: string, opts: { method?: Method; body?:
   }
   let data: any = {};
   try { data = await res.json(); } catch { /* empty body */ }
-  if (!res.ok) throw new ApiError(data.error || `Request failed (${res.status})`, res.status);
+  if (!res.ok) throw new ApiError(data.error || `Request failed (${res.status})`, res.status, data);
   return data as T;
 }
 

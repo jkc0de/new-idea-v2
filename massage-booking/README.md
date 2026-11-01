@@ -35,12 +35,40 @@ npm test
 - Settings: booking link, time zone, currency, minimum notice, how far ahead, cancellation cutoff, slot interval
 - Several businesses can share one install; each only sees its own data
 
+## Scheduling engine (the hard part)
+
+Therapist time and treatment rooms are the studio's inventory. Every "can this happen?" question goes through `lib/scheduler.js`:
+
+| Rule | Type | What it means |
+|---|---|---|
+| Therapist free (incl. cleanup buffer) | hard | Never double-booked, not even by staff |
+| A free room the service is allowed in | hard | Hot stone only in the Stone Room, etc. Rooms are optional |
+| Inside working hours for that date | soft | Weekly shifts (split shifts = breaks) or a date-specific override |
+| Not on time off | soft | Full or partial days |
+| Under the daily session limit | soft | e.g. max 6 massages a day |
+| Not too long without a break | soft | e.g. no more than 3h of near-continuous work without a 30-min break |
+
+Online bookings must pass everything. Staff get a clear warning for soft rules and can **book anyway**; the override is recorded in the booking's history.
+
+Smart assignment: "any therapist" goes to whoever has the most free time left that day; rooms are picked so special rooms stay free for the services that need them.
+
+When schedules change (time off, new hours, therapist deactivated), affected bookings are flagged under **Needs attention** (`GET /api/conflicts`).
+
+## History & reporting
+
+- Every booking keeps an activity log: created (online/staff), moved (from → to, reason), status changes, notes, overrides
+- `GET /api/appointments?q=` searches all-time history by client, email, phone or reference
+- `GET /api/inventory` — capacity vs booked minutes per therapist per day (+ rooms)
+- `GET /api/reports` — revenue, utilization, no-show/cancellation rates, new vs returning clients, top services, busiest days/hours
+- Client profiles: visits, spend, favourite therapist/service, typical rebooking interval, one-tap rebook
+
 ## How it works
 
-- `lib/availability.js` — slot engine: working hours − time off − existing bookings (incl. buffers), with lead time and booking window rules
+- `lib/scheduler.js` — the engine above
 - `lib/app.js` — HTTP routes and JSON API
-- `lib/db.js` — SQLite schema. Dates/times are stored in the business's local time zone
+- `lib/db.js` — SQLite schema + in-place migrations. Dates/times are stored in the business's local time zone
 - `public/` — plain HTML/JS pages, no build step
+- `test/` — `npm test` covers booking flow, every scheduling rule, rescheduling, conflicts, inventory and reports
 
 Config via env: `PORT`, `DB_FILE` (default `data/booking.db`), `SECURE_COOKIES=1` behind HTTPS.
 
@@ -49,5 +77,6 @@ Config via env: `PORT`, `DB_FILE` (default `data/booking.db`), `SECURE_COOKIES=1
 - Email/SMS confirmations and reminders (biggest gap — clients currently save their link manually)
 - Online payments / deposits (Stripe)
 - Staff logins with their own permissions (one owner login per business today)
-- Client self-service rescheduling (they can cancel and rebook)
+- Waitlist and recurring bookings
+- Web dashboard doesn't yet expose rooms, limits, overrides or reports (the mobile app does)
 - Login rate limiting and password reset

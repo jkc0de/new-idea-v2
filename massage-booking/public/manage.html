@@ -24,7 +24,7 @@
 
     async function load() {
       try {
-        const { appointment: a, business: b, canCancel } = await api(`/api/public/booking/${encodeURIComponent(ref)}?token=${encodeURIComponent(token)}`);
+        const { appointment: a, business: b, canCancel, canReschedule } = await api(`/api/public/booking/${encodeURIComponent(ref)}?token=${encodeURIComponent(token)}`);
         document.title = `Your booking — ${b.name}`;
         const cancelBtn = h('button.btn-danger', { type: 'button', onclick: async () => {
           if (!confirm('Cancel this appointment?')) return;
@@ -39,7 +39,10 @@
           h('p', h('strong', fmtDateLong(a.date)), h('br'), `${fmtTime(a.startMin)} – ${fmtTime(a.endMin)} with ${a.therapistName}`),
           h('p.small.muted', `Reference ${a.ref} · ${fmtMoney(a.priceCents, b.currency)}`),
           b.address ? h('p.small', b.address) : null,
-          a.status === 'booked' && canCancel ? cancelBtn : null,
+          a.status === 'booked' && (canCancel || canReschedule) ? h('div.row', { style: 'gap:8px' },
+            canReschedule ? h('button.btn-primary', { type: 'button', onclick: () => changeTime(a, b) }, 'Change time') : null,
+            canCancel ? cancelBtn : null) : null,
+          h('div#change'),
           a.status === 'booked' && !canCancel
             ? h('p.small.muted', `Online cancellation closes ${b.cancelCutoffHours} hours before your appointment.${b.phone ? ` Call ${b.phone} for changes.` : ''}`) : null,
           h('p', { style: 'margin-top:16px' }, h('a', { href: `/b/${encodeURIComponent(slug)}` }, 'Book another appointment'))));
@@ -47,6 +50,34 @@
         view.replaceChildren();
         showError(e.status === 404 ? 'We couldn’t find that booking. Check the link from your confirmation.' : e.message);
       }
+    }
+    /** Let the client pick another open time for the same treatment. */
+    async function changeTime(a, b) {
+      const box = document.getElementById('change');
+      const daysEl = h('div.row', { style: 'gap:6px;flex-wrap:wrap;margin:12px 0' });
+      const slotsEl = h('div.row', { style: 'gap:6px;flex-wrap:wrap' });
+      box.replaceChildren(h('div.card', { style: 'margin-top:16px' }, h('h2', 'Pick a new time'), h('p.small.muted', 'Showing open times for the same treatment.'), daysEl, slotsEl));
+      const auth = `serviceId=${a.serviceId}&ref=${encodeURIComponent(ref)}&token=${encodeURIComponent(token)}`;
+      const base = `/api/public/${encodeURIComponent(slug)}`;
+      try {
+        const { days } = await api(`${base}/days?${auth}&count=21`);
+        const open = days.filter((d) => d.available);
+        if (!open.length) { daysEl.replaceChildren(h('p.muted', 'No other times available in the next 3 weeks. Please call us.')); return; }
+        const pickDay = async (date, btn) => {
+          daysEl.querySelectorAll('button').forEach((x) => x.classList.toggle('btn-primary', x === btn));
+          slotsEl.replaceChildren(h('p.muted.small', 'Loading…'));
+          const { slots } = await api(`${base}/slots?${auth}&date=${date}`);
+          slotsEl.replaceChildren(...slots.map((sl) => h('button.btn-sm', { type: 'button', onclick: async () => {
+            if (!confirm(`Move your ${a.serviceName} to ${fmtDateLong(date)} at ${fmtTime(sl.startMin)}?`)) return;
+            try {
+              await api(`/api/public/booking/${encodeURIComponent(ref)}/reschedule`, { method: 'POST', body: { token, date, startMin: sl.startMin } });
+              toast('Booking moved'); box.replaceChildren(); load();
+            } catch (e) { showError(e.message); }
+          } }, fmtTime(sl.startMin))));
+        };
+        daysEl.replaceChildren(...open.map((d) => h('button.btn-sm', { type: 'button', onclick: (e) => pickDay(d.date, e.currentTarget) }, fmtDate(d.date))));
+        pickDay(open[0].date, daysEl.querySelector('button'));
+      } catch (e) { showError(e.message); }
     }
     load();
   </script>
