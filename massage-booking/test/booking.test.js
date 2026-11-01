@@ -169,3 +169,21 @@ test('past dates and dates beyond the booking window have no slots', async (t) =
   assert.ok(await slots('2026-11-03') > 0);
   assert.equal(await slots('2027-03-01'), 0); // > 60 days out
 });
+
+test('mobile apps can authenticate with a Bearer token', async (t) => {
+  const { server, base } = await startServer();
+  t.after(() => server.close());
+  const signup = await fetch(base + '/api/auth/signup', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ businessName: 'Mobile', email: 'm@example.com', password: 'password1' }),
+  }).then((r) => r.json());
+  assert.ok(signup.token);
+  const me = await fetch(base + '/api/me', { headers: { Authorization: `Bearer ${signup.token}` } });
+  assert.equal(me.status, 200);
+  assert.equal(me.headers.get('access-control-allow-origin'), '*');
+  const pre = await fetch(base + '/api/me', { method: 'OPTIONS' });
+  assert.equal(pre.status, 204);
+  await fetch(base + '/api/auth/logout', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${signup.token}` }, body: '{}' });
+  const after = await fetch(base + '/api/me', { headers: { Authorization: `Bearer ${signup.token}` } });
+  assert.equal(after.status, 401);
+});

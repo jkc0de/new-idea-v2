@@ -51,9 +51,17 @@ function readBody(req) {
     req.on('error', reject);
   });
 }
+// The API allows any origin but never credentials (cookies) cross-origin, so CSRF isn't possible:
+// cross-origin callers (the mobile app) must send an explicit Bearer token.
+const CORS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+  'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
+  'Access-Control-Max-Age': '600',
+};
 function send(res, status, body, headers = {}) {
   const data = body === undefined ? '' : JSON.stringify(body);
-  res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', ...headers });
+  res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', ...CORS, ...headers });
   res.end(data);
 }
 function serveFile(res, file) {
@@ -199,7 +207,7 @@ function createApp(db, { now = () => new Date(), secureCookies = false } = {}) {
     const id = Number(db.prepare('INSERT INTO businesses (name, slug, email, password_hash, timezone) VALUES (?, ?, ?, ?, ?)')
       .run(name, slug, email, auth.hashPassword(password), timezone).lastInsertRowid);
     const s = auth.createSession(db, id);
-    return { status: 201, body: { business: ownerBusiness(getBySlug(slug)) }, headers: { 'Set-Cookie': `sid=${s.token}; Max-Age=${s.maxAge}; ${cookieFlags}` } };
+    return { status: 201, body: { business: ownerBusiness(getBySlug(slug)), token: s.token }, headers: { 'Set-Cookie': `sid=${s.token}; Max-Age=${s.maxAge}; ${cookieFlags}` } };
   });
 
   r.add('POST', '/api/auth/login', async ({ body }) => {
@@ -207,11 +215,11 @@ function createApp(db, { now = () => new Date(), secureCookies = false } = {}) {
     const b = db.prepare('SELECT * FROM businesses WHERE email = ?').get(email);
     if (!b || !auth.verifyPassword(String(body.password || ''), b.password_hash)) throw new HttpError(401, 'Wrong email or password');
     const s = auth.createSession(db, b.id);
-    return { body: { business: ownerBusiness(b) }, headers: { 'Set-Cookie': `sid=${s.token}; Max-Age=${s.maxAge}; ${cookieFlags}` } };
+    return { body: { business: ownerBusiness(b), token: s.token }, headers: { 'Set-Cookie': `sid=${s.token}; Max-Age=${s.maxAge}; ${cookieFlags}` } };
   });
 
-  r.add('POST', '/api/auth/logout', async ({ cookies }) => {
-    auth.destroySession(db, cookies.sid);
+  r.add('POST', '/api/auth/logout', async ({ sessionToken }) => {
+    auth.destroySession(db, sessionToken);
     return { body: { ok: true }, headers: { 'Set-Cookie': `sid=; Max-Age=0; ${cookieFlags}` } };
   });
 
@@ -464,6 +472,12 @@ function createApp(db, { now = () => new Date(), secureCookies = false } = {}) {
     return { status: 201, body: { appointment: apptOut(appt) } };
   }, { auth: true });
 
+  r.add('GET', '/api/appointments/:id', async ({ business, params }) => {
+    const a = db.prepare(`${APPT_SELECT} WHERE a.id = ? AND a.business_id = ?`).get(params.id, business.id);
+    if (!a) throw notFound('Appointment not found');
+    return { body: { appointment: apptOut(a) } };
+  }, { auth: true });
+
   r.add('PATCH', '/api/appointments/:id', async ({ business, params, body }) => {
     const a = db.prepare('SELECT * FROM appointments WHERE id = ? AND business_id = ?').get(params.id, business.id);
     if (!a) throw notFound('Appointment not found');
@@ -652,19 +666,25 @@ function createApp(db, { now = () => new Date(), secureCookies = false } = {}) {
         if (pathname.startsWith('/static/')) return serveFile(res, pathname.slice('/static/'.length));
         return send(res, 404, { error: 'Not found' });
       }
+      if (req.method === 'OPTIONS' && pathname.startsWith('/api/')) {
+        res.writeHead(204, CORS);
+        return res.end();
+      }
       const m = r.match(req.method, pathname);
       if (!m) throw notFound();
       if (req.method !== 'GET' && !/application\/json/.test(req.headers['content-type'] || '')) {
         throw new HttpError(415, 'Send JSON');
       }
       const cookies = parseCookies(req.headers.cookie);
+      const bearer = /^Bearer\s+(\S+)$/i.exec(req.headers.authorization || '');
+      const sessionToken = bearer ? bearer[1] : cookies.sid;
       let business = null;
       if (m.route.opts.auth) {
-        business = auth.businessForToken(db, cookies.sid);
+        business = auth.businessForToken(db, sessionToken);
         if (!business) throw new HttpError(401, 'Please log in');
       }
       const body = req.method === 'GET' ? {} : await readBody(req);
-      const out = await m.route.handler({ req, body: body && typeof body === 'object' ? body : {}, params: m.params, query: url.searchParams, cookies, business });
+      const out = await m.route.handler({ req, body: body && typeof body === 'object' ? body : {}, params: m.params, query: url.searchParams, cookies, sessionToken, business });
       send(res, out.status || 200, out.body, out.headers);
     } catch (err) {
       if (err instanceof HttpError) return send(res, err.status, { error: err.message });
