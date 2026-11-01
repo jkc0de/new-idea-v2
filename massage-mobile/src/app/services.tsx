@@ -5,13 +5,15 @@ import { Button, Card, Divider, Empty, ErrorBanner, Loading, Row, RowIcon, Scree
 import { useAuth } from '@/lib/auth';
 import { duration, money } from '@/lib/format';
 import { space, useColors } from '@/lib/theme';
-import type { Service } from '@/lib/types';
+import type { Room, Service } from '@/lib/types';
 import { useApi } from '@/lib/use-api';
 
 export default function Services() {
   const c = useColors();
   const { business } = useAuth();
   const q = useApi<{ services: Service[] }>('/api/services');
+  const rooms = useApi<{ rooms: Room[] }>('/api/rooms');
+  const roomName = new Map((rooms.data?.rooms ?? []).map((r) => [r.id, r.name]));
   if (!q.data) return q.error ? <ErrorBanner message={q.error} onRetry={q.reload} /> : <Loading />;
   const active = q.data.services.filter((s) => s.active);
   const hidden = q.data.services.filter((s) => !s.active);
@@ -24,7 +26,7 @@ export default function Services() {
           <Row
             left={<RowIcon icon="leaf" bg={dim ? c.surface2 : c.accentSoft} color={dim ? c.faint : c.accentStrong} />}
             title={s.name}
-            subtitle={`${duration(s.durationMin)} · ${money(s.priceCents, business?.currency)}${s.bufferMin ? ` · ${s.bufferMin}m reset` : ''}`}
+            subtitle={`${duration(s.durationMin)} · ${money(s.priceCents, business?.currency)}${s.bufferMin ? ` · ${s.bufferMin}m reset` : ''}${s.roomIds?.length ? ` · ${s.roomIds.map((id) => roomName.get(id)).filter(Boolean).join(' / ')} only` : ''}`}
             onPress={() => router.push({ pathname: '/service/[id]', params: { id: String(s.id) } })}
           />
         </View>

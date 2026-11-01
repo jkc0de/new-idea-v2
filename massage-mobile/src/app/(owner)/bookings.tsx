@@ -3,7 +3,7 @@ import { useMemo, useState } from 'react';
 import { RefreshControl, SectionList, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Avatar, Card, Empty, ErrorBanner, Fab, Loading, Segmented, StatusPill, T } from '@/components/ui';
+import { Avatar, Card, Empty, ErrorBanner, Fab, IconButton, Loading, Segmented, StatusPill, T } from '@/components/ui';
 import { useAuth } from '@/lib/auth';
 import { addDays, money, relativeDay, time } from '@/lib/format';
 import { space, useColors } from '@/lib/theme';
@@ -40,7 +40,10 @@ export default function Bookings() {
   return (
     <View style={{ flex: 1, backgroundColor: c.bg }}>
       <View style={{ paddingTop: insets.top + space.md, paddingHorizontal: space.lg, paddingBottom: space.md }}>
-        <T v="title" style={{ marginBottom: space.lg }}>Bookings</T>
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: space.lg }}>
+          <T v="title">Bookings</T>
+          <IconButton icon="search" label="Search booking history" onPress={() => router.push('/history')} />
+        </View>
         <Segmented options={[{ key: 'upcoming', label: 'Upcoming' }, { key: 'past', label: 'Past' }, { key: 'cancelled', label: 'Cancelled' }]} value={filter} onChange={setFilter} />
       </View>
       <ErrorBanner message={q.error} onRetry={q.reload} />
@@ -62,7 +65,7 @@ export default function Bookings() {
                 <Avatar name={a.clientName} seed={a.clientId ?? a.id} />
                 <View style={{ flex: 1, minWidth: 0 }}>
                   <T v="bodyStrong" numberOfLines={1}>{a.clientName}</T>
-                  <T v="small" color={c.muted} numberOfLines={1}>{`${a.serviceName} · ${a.therapistName}`}</T>
+                  <T v="small" color={c.muted} numberOfLines={1}>{[a.serviceName, a.therapistName, a.roomName].filter(Boolean).join(' · ')}</T>
                 </View>
                 <View style={{ alignItems: 'flex-end', gap: 4 }}>
                   <T v="bodyStrong" style={{ fontSize: 15 }}>{time(a.startMin)}</T>

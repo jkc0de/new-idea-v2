@@ -4,7 +4,7 @@ import { FlatList, RefreshControl, StyleSheet, TextInput, View } from 'react-nat
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Avatar, Divider, Empty, ErrorBanner, Ionicons, Loading, Row, T } from '@/components/ui';
-import { fmtDate } from '@/lib/format';
+import { fmtDate, toDateStr } from '@/lib/format';
 import { radius, space, useColors } from '@/lib/theme';
 import type { Client } from '@/lib/types';
 import { useApi } from '@/lib/use-api';
@@ -48,7 +48,7 @@ export default function Clients() {
                 item.visits ? `${item.visits} visit${item.visits === 1 ? '' : 's'}` : 'No visits yet',
                 item.lastVisit ? `last ${fmtDate(item.lastVisit, { month: 'short', day: 'numeric' })}` : null,
               ].filter(Boolean).join(' · ')}
-              right={item.notes ? <Ionicons name="document-text-outline" size={16} color={c.faint} /> : undefined}
+              right={<ClientBadges visits={item.visits ?? 0} lastVisit={item.lastVisit ?? null} hasNotes={!!item.notes} />}
               onPress={() => router.push({ pathname: '/client/[id]', params: { id: String(item.id) } })}
             />
           )}
@@ -61,4 +61,20 @@ export default function Clients() {
 
 const styles = StyleSheet.create({
   search: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingHorizontal: space.md, borderRadius: radius.md },
+  badge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: radius.pill },
 });
+
+/** "Regular" for loyal clients, "Lapsed" for ones who haven't been in for 60+ days. */
+function ClientBadges({ visits, lastVisit, hasNotes }: { visits: number; lastVisit: string | null; hasNotes: boolean }) {
+  const c = useColors();
+  const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - 60);
+  const lapsed = !!lastVisit && lastVisit < toDateStr(cutoff);
+  const regular = visits >= 5 && !lapsed;
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+      {regular && <View style={[styles.badge, { backgroundColor: c.accentSoft }]}><T v="caption" color={c.accentStrong}>REGULAR</T></View>}
+      {lapsed && <View style={[styles.badge, { backgroundColor: c.warnSoft }]}><T v="caption" color={c.warn}>LAPSED</T></View>}
+      {hasNotes && <Ionicons name="document-text-outline" size={16} color={c.faint} />}
+    </View>
+  );
+}

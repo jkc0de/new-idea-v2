@@ -9,7 +9,7 @@ import { useAuth } from '@/lib/auth';
 import { confirmAsync } from '@/lib/confirm';
 import { duration as fmtDuration } from '@/lib/format';
 import { space, useColors } from '@/lib/theme';
-import type { Service } from '@/lib/types';
+import type { Room, Service } from '@/lib/types';
 import { useApi } from '@/lib/use-api';
 
 const DURATIONS = [30, 45, 60, 75, 90, 120];
@@ -29,6 +29,9 @@ export default function ServiceEdit() {
   const [price, setPrice] = useState('');
   const [buffer, setBuffer] = useState(15);
   const [active, setActive] = useState(true);
+  const [roomIds, setRoomIds] = useState<number[]>([]);
+  const rooms = useApi<{ rooms: Room[] }>('/api/rooms');
+  const openRooms = (rooms.data?.rooms ?? []).filter((r) => r.active || roomIds.includes(r.id));
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -36,7 +39,7 @@ export default function ServiceEdit() {
     const s = q.data?.services.find((x) => String(x.id) === id);
     if (!s || loaded) return;
     setName(s.name); setDescription(s.description); setMins(s.durationMin);
-    setPrice((s.priceCents / 100).toFixed(2).replace(/\.00$/, '')); setBuffer(s.bufferMin); setActive(s.active);
+    setPrice((s.priceCents / 100).toFixed(2).replace(/\.00$/, '')); setBuffer(s.bufferMin); setActive(s.active); setRoomIds(s.roomIds ?? []);
     setLoaded(true);
   }, [q.data, id, loaded]);
 
@@ -49,7 +52,7 @@ export default function ServiceEdit() {
     try {
       await api(isNew ? '/api/services' : `/api/services/${id}`, {
         method: isNew ? 'POST' : 'PUT',
-        body: { name, description, durationMin: mins, priceCents: cents, bufferMin: buffer, active },
+        body: { name, description, durationMin: mins, priceCents: cents, bufferMin: buffer, active, roomIds },
       });
       tap('success');
       router.back();
@@ -83,6 +86,19 @@ export default function ServiceEdit() {
           </View>
           <T v="small" color={c.faint} style={{ marginTop: space.sm }}>Blocked after each session for cleanup. Clients don't see it.</T>
         </Section>
+
+        {openRooms.length > 0 && (
+          <Section title={`Rooms · ${roomIds.length ? `${roomIds.length} selected` : 'any room'}`}>
+            <View style={styles.wrap}>
+              <Chip label="Any room" icon={roomIds.length ? undefined : 'checkmark'} selected={!roomIds.length} onPress={() => setRoomIds([])} />
+              {openRooms.map((r) => (
+                <Chip key={r.id} label={r.name} icon={roomIds.includes(r.id) ? 'checkmark' : undefined} selected={roomIds.includes(r.id)}
+                  onPress={() => setRoomIds((ids) => (ids.includes(r.id) ? ids.filter((x) => x !== r.id) : [...ids, r.id]))} />
+              ))}
+            </View>
+            <T v="small" color={c.faint} style={{ marginTop: space.sm }}>Limit to rooms with the right equipment, e.g. hot stone → Stone Room.</T>
+          </Section>
+        )}
 
         <Card padded={false} style={{ marginTop: space.xl }}>
           <View style={styles.switchRow}>
