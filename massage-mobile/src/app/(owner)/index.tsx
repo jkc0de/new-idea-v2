@@ -1,21 +1,19 @@
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View, useColorScheme, type ScrollViewInstance } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Card, Chip, Empty, ErrorBanner, Fab, IconButton, Ionicons, Loading, StatusPill, T, tap } from '@/components/ui';
+import { CapacityStrip } from '@/components/sched-capacity';
+import { DayTimeline } from '@/components/sched-day-timeline';
+import { Card, Chip, Empty, ErrorBanner, Fab, IconButton, Ionicons, Loading, Segmented, StatusPill, T, tap } from '@/components/ui';
 import { useAuth } from '@/lib/auth';
 import { addDays, duration, fmtDate, money, parseDate, relativeDay, time } from '@/lib/format';
 import { avatarColor, radius, space, type, useColors } from '@/lib/theme';
-import type { Appointment, Stats } from '@/lib/types';
+import type { Appointment, ScheduleDay, Stats } from '@/lib/types';
 import { useApi } from '@/lib/use-api';
 
-interface Schedule {
-  date: string;
-  today: string;
-  therapists: { id: number; name: string; hours: { startMin: number; endMin: number }[]; timeOff: { id: number; startMin: number; endMin: number; reason: string }[] }[];
-  appointments: Appointment[];
-}
+type View_ = 'agenda' | 'timeline';
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 type Item =
   | { kind: 'appt'; start: number; appt: Appointment }
@@ -32,12 +30,21 @@ export default function Today() {
   const scheme = useColorScheme();
   const insets = useSafeAreaInsets();
   const { business } = useAuth();
-  const [date, setDate] = useState<string | null>(null);
-  const [who, setWho] = useState<number | null>(null);
+  // Deep links from the Schedule tab: ?date=YYYY-MM-DD&therapistId=N
+  const params = useLocalSearchParams<{ date?: string; therapistId?: string }>();
+  const [date, setDate] = useState<string | null>(params.date && DATE_RE.test(params.date) ? params.date : null);
+  const [who, setWho] = useState<number | null>(params.therapistId ? Number(params.therapistId) : null);
+  const [view, setView] = useState<View_>('agenda');
+  useEffect(() => {
+    if (params.date && DATE_RE.test(params.date)) setDate(params.date);
+    setWho(params.therapistId ? Number(params.therapistId) : null);
+  }, [params.date, params.therapistId]);
   const stats = useApi<Stats>('/api/stats');
-  const sched = useApi<Schedule>(`/api/schedule${date ? `?date=${date}` : ''}`);
+  const sched = useApi<ScheduleDay>(`/api/schedule${date ? `?date=${date}` : ''}`);
+  const conflicts = useApi<{ conflicts: Appointment[] }>('/api/conflicts');
   const today = stats.data?.today ?? sched.data?.today ?? null;
   const day = sched.data;
+  const conflictList = conflicts.data?.conflicts ?? [];
 
   // Week strip: 3 weeks back to 5 weeks ahead, centred on today.
   const days = useMemo(() => (today ? Array.from({ length: 56 }, (_, i) => addDays(today, i - 21)) : []), [today]);
@@ -48,7 +55,7 @@ export default function Today() {
     const i = days.indexOf(selected);
     if (i >= 0) stripRef.current?.scrollTo({ x: Math.max(0, i * 56 - 120), animated: false });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [days.length]);
+  }, [days.length, selected]);
 
   const items = useMemo<Item[]>(() => {
     if (!day) return [];
@@ -85,7 +92,7 @@ export default function Today() {
 
   return (
     <View style={{ flex: 1, backgroundColor: c.bg }}>
-      <ScrollView contentContainerStyle={{ paddingTop: insets.top + space.md, paddingBottom: 120 }} stickyHeaderIndices={[2]}>
+      <ScrollView contentContainerStyle={{ paddingTop: insets.top + space.md, paddingBottom: 120 }} stickyHeaderIndices={[3]}>
         {/* header */}
         <View style={[styles.pad, styles.header]}>
           <View style={{ flex: 1 }}>
@@ -94,6 +101,25 @@ export default function Today() {
           </View>
           <IconButton icon="share-outline" label="Share booking link" onPress={() => router.push('/(owner)/more')} />
         </View>
+
+        {/* bookings that no longer fit someone's schedule */}
+        {conflictList.length > 0 ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`${conflictList.length} bookings need attention`}
+            onPress={() => { tap(); router.push('/conflicts'); }}
+            style={({ pressed }) => [styles.alert, { backgroundColor: c.dangerSoft, borderColor: c.danger }, pressed && { opacity: 0.85 }]}
+          >
+            <View style={[styles.alertIcon, { backgroundColor: c.danger }]}><Ionicons name="warning" size={18} color={c.onAccent} /></View>
+            <View style={{ flex: 1 }}>
+              <T v="bodyStrong" color={c.danger}>{`${conflictList.length} booking${conflictList.length === 1 ? '' : 's'} need${conflictList.length === 1 ? 's' : ''} attention`}</T>
+              <T v="small" color={c.danger} numberOfLines={1}>
+                {`${conflictList[0].clientName} · ${fmtDate(conflictList[0].date)} — ${conflictList[0].issues?.[0]?.message ?? 'schedule changed'}`}
+              </T>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={c.danger} />
+          </Pressable>
+        ) : <View />}
 
         {/* stats */}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={[styles.pad, { gap: space.md, paddingVertical: space.lg }]}>
@@ -134,7 +160,7 @@ export default function Today() {
           )}
         </View>
 
-        {/* agenda */}
+        {/* day summary + view toggle */}
         <View style={[styles.pad, { marginTop: space.md }]}>
           <ErrorBanner message={sched.error || stats.error} onRetry={() => { sched.reload(); stats.reload(); }} />
           {day && (
@@ -143,6 +169,35 @@ export default function Today() {
               <T v="small" color={c.muted}>{`${active.length} appointment${active.length === 1 ? '' : 's'}${active.length ? ` · ${money(dayRevenue, business?.currency)}` : ''}`}</T>
             </View>
           )}
+          <Segmented options={[{ key: 'agenda', label: 'Agenda' }, { key: 'timeline', label: 'Timeline' }]} value={view} onChange={setView} />
+        </View>
+
+        {/* team capacity for the day */}
+        {day && view === 'agenda' && day.therapists.length > 0 && (
+          <View style={{ marginTop: space.md }}>
+            <CapacityStrip therapists={day.therapists} selected={who} onSelect={(id) => setWho(id)} />
+          </View>
+        )}
+
+        {view === 'timeline' && day && (
+          <View style={{ paddingHorizontal: space.md, marginTop: space.md }}>
+            {day.therapists.length === 0
+              ? <Card><Empty icon="people-outline" title="No team yet" body="Add therapists under Studio → Team." /></Card>
+              : (
+                <DayTimeline
+                  day={day}
+                  onlyTherapist={who}
+                  nowMin={isToday ? nowMin : null}
+                  onPressAppointment={(a) => router.push({ pathname: '/appointment/[id]', params: { id: String(a.id) } })}
+                  onPressSlot={(therapistId, startMin) => router.push({ pathname: '/new-booking', params: { therapistId: String(therapistId), date: day.date, startMin: String(startMin) } })}
+                />
+              )}
+          </View>
+        )}
+
+        {/* agenda */}
+        {view === 'agenda' && (
+        <View style={[styles.pad, { marginTop: space.md }]}>
           {sched.loading && !day && <Loading />}
           {day && items.length === 0 && (
             <Card><Empty icon="sunny-outline" title="Nothing booked" body={day.therapists.length ? 'Enjoy the quiet — or add a booking.' : 'Add your team under Studio to start taking bookings.'} /></Card>
@@ -159,7 +214,10 @@ export default function Today() {
                 </View>
               )}
               {it.kind === 'gap' && (
-                <Pressable onPress={() => router.push({ pathname: '/new-booking', params: { date: day!.date } })} style={[styles.gap, { borderColor: c.border }]}>
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => router.push({ pathname: '/new-booking', params: { date: day!.date, startMin: String(it.start), ...(who ? { therapistId: String(who) } : {}) } })}
+                  style={[styles.gap, { borderColor: c.border }]}>
                   <T v="small" color={c.faint}>{`${time(it.start)} · Open for ${duration(it.end - it.start)}`}</T>
                   <Ionicons name="add-circle-outline" size={18} color={c.faint} />
                 </Pressable>
@@ -168,8 +226,9 @@ export default function Today() {
           ))}
           {nowIndex === -1 && isToday && items.length > 0 && items[items.length - 1].start < nowMin && <NowLine />}
         </View>
+        )}
       </ScrollView>
-      <Fab label="New booking" onPress={() => router.push({ pathname: '/new-booking', params: { date: selected ?? '' } })} />
+      <Fab label="New booking" onPress={() => router.push({ pathname: '/new-booking', params: { date: selected ?? '', ...(who ? { therapistId: String(who) } : {}) } })} />
     </View>
   );
 }
@@ -189,6 +248,7 @@ function StatCard({ icon, label, value, sub, tint, fg }: { icon: any; label: str
 function AgendaCard({ a, color, showTherapist }: { a: Appointment; color: string; showTherapist: boolean }) {
   const c = useColors();
   const dim = a.status === 'cancelled';
+  const issue = a.issues?.[0];
   return (
     <View style={styles.agendaRow}>
       <View style={styles.timeCol}>
@@ -196,7 +256,13 @@ function AgendaCard({ a, color, showTherapist }: { a: Appointment; color: string
         <T v="small" color={c.muted}>{time(a.startMin).split(' ')[1]}</T>
         <T v="small" color={c.faint} style={{ marginTop: 2 }}>{duration(a.endMin - a.startMin)}</T>
       </View>
-      <Card padded={false} style={{ flex: 1, overflow: 'hidden', opacity: dim ? 0.55 : 1 }} onPress={() => router.push({ pathname: '/appointment/[id]', params: { id: String(a.id) } })}>
+      <Card padded={false} style={[{ flex: 1, overflow: 'hidden', opacity: dim ? 0.55 : 1 }, issue && { borderColor: c.danger, borderWidth: 1.5 }]} onPress={() => router.push({ pathname: '/appointment/[id]', params: { id: String(a.id) } })}>
+        {issue && (
+          <View style={[styles.issueBar, { backgroundColor: c.dangerSoft }]}>
+            <Ionicons name="warning" size={14} color={c.danger} />
+            <T v="small" color={c.danger} style={{ flex: 1, fontWeight: '600' }} numberOfLines={2}>{issue.message}</T>
+          </View>
+        )}
         <View style={{ flexDirection: 'row' }}>
           <View style={{ width: 5, backgroundColor: color }} />
           <View style={{ flex: 1, padding: space.md, gap: 2 }}>
@@ -204,7 +270,7 @@ function AgendaCard({ a, color, showTherapist }: { a: Appointment; color: string
               <T v="bodyStrong" style={[{ flex: 1 }, dim && { textDecorationLine: 'line-through' }]} numberOfLines={1}>{a.clientName}</T>
               {a.status !== 'booked' && <StatusPill status={a.status} />}
             </View>
-            <T v="small" color={c.muted} numberOfLines={1}>{a.serviceName}</T>
+            <T v="small" color={c.muted} numberOfLines={1}>{a.roomName ? `${a.serviceName} · ${a.roomName}` : a.serviceName}</T>
             {showTherapist && (
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 }}>
                 <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: color }} />
@@ -244,4 +310,7 @@ const styles = StyleSheet.create({
   gap: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, borderStyle: 'dashed', borderRadius: radius.md, padding: space.md, marginBottom: space.md, marginLeft: 68 },
   nowRow: { flexDirection: 'row', alignItems: 'center', marginBottom: space.md, marginLeft: 62 },
   nowDot: { width: 10, height: 10, borderRadius: 5 },
+  alert: { flexDirection: 'row', alignItems: 'center', gap: space.md, marginHorizontal: space.lg, marginTop: space.lg, padding: space.md, borderRadius: radius.lg, borderWidth: 1 },
+  alertIcon: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
+  issueBar: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: space.md, paddingVertical: 6 },
 });
