@@ -206,6 +206,19 @@ function createApp(db, { now = () => new Date(), secureCookies = false } = {}) {
     return db.prepare(`${APPT_SELECT} WHERE a.id = ?`).get(id);
   }
 
+  /**
+   * Schedule problems on a booked appointment, minus any staff already accepted with "book anyway"
+   * when it was created or last moved. New problems (e.g. time off added later) still show.
+   */
+  function openIssues(ctx, a) {
+    const codes = sched.scheduleIssues(ctx, a);
+    if (!codes.length) return [];
+    const last = db.prepare(`SELECT detail FROM appointment_events WHERE appointment_id = ? AND type IN ('created','rescheduled') ORDER BY id DESC LIMIT 1`).get(a.id);
+    const accepted = last ? (JSON.parse(last.detail || '{}').override || []) : [];
+    const remaining = codes.filter((c) => !accepted.includes(c));
+    return remaining.length ? sched.describe(ctx, a.therapist_id, remaining) : [];
+  }
+
   /** Throws a 409 that explains exactly why a booking can't happen. Staff can pass `override` to accept soft issues. */
   function assertBookable(ctx, therapistId, verdict, { allowSoft }) {
     if (verdict.hard.length) {
@@ -574,8 +587,8 @@ function createApp(db, { now = () => new Date(), secureCookies = false } = {}) {
     for (const a of rows) {
       if (!ctxByDate.has(a.date)) ctxByDate.set(a.date, loadDay(business, a.date));
       const ctx = ctxByDate.get(a.date);
-      const codes = sched.scheduleIssues(ctx, a);
-      if (codes.length) out.push({ ...apptOut(a), issues: sched.describe(ctx, a.therapist_id, codes) });
+      const issues = openIssues(ctx, a);
+      if (issues.length) out.push({ ...apptOut(a), issues });
     }
     return out;
   }
@@ -631,8 +644,8 @@ function createApp(db, { now = () => new Date(), secureCookies = false } = {}) {
     const appointments = appts.map((a) => {
       const out = apptOut(a);
       if (a.status === 'booked') {
-        const codes = sched.scheduleIssues(ctx, a);
-        if (codes.length) out.issues = sched.describe(ctx, a.therapist_id, codes);
+        const issues = openIssues(ctx, a);
+        if (issues.length) out.issues = issues;
       }
       return out;
     });
@@ -739,9 +752,8 @@ function createApp(db, { now = () => new Date(), secureCookies = false } = {}) {
     if (!a) throw notFound('Appointment not found');
     const out = apptOut(a);
     if (a.status === 'booked') {
-      const ctx = loadDay(business, a.date);
-      const codes = sched.scheduleIssues(ctx, a);
-      if (codes.length) out.issues = sched.describe(ctx, a.therapist_id, codes);
+      const issues = openIssues(loadDay(business, a.date), a);
+      if (issues.length) out.issues = issues;
     }
     return { body: { appointment: out, events: eventsFor(a.id) } };
   }, { auth: true });

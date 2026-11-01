@@ -202,3 +202,14 @@ test('history search and reports', async (t) => {
   assert.equal(c.stats.rebook.therapistId, ann.id);
   void db;
 });
+
+test('bookings made with "book anyway" are not flagged again, but new problems are', async (t) => {
+  const { call, ann, book } = await setup(t);
+  const r = await book({ therapistId: ann.id, startMin: 1080, override: true }); // 18:00, after hours
+  assert.equal(r.status, 201);
+  assert.equal((await call('/api/conflicts')).body.conflicts.length, 0);
+  await call(`/api/therapists/${ann.id}/time-off`, { method: 'POST', body: { date: MON } });
+  const after = (await call('/api/conflicts')).body.conflicts;
+  assert.equal(after.length, 1);
+  assert.deepEqual(after[0].issues.map((i) => i.code), ['time_off']);
+});

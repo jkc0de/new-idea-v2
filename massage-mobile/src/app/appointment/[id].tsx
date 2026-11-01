@@ -3,13 +3,14 @@ import { useEffect, useState } from 'react';
 import { KeyboardAvoidingView, Linking, Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { ActivityTimeline, type NameLookup } from '@/components/bk-activity';
 import { Avatar, Button, Card, ErrorBanner, Ionicons, Loading, Section, StatusPill, T, tap, type IconName } from '@/components/ui';
 import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { confirmAsync } from '@/lib/confirm';
 import { duration, fmtDate, money, parseDate, time } from '@/lib/format';
 import { radius, space, useColors } from '@/lib/theme';
-import type { Appointment, Status } from '@/lib/types';
+import type { Appointment, AppointmentEvent, Room, Service, Status, Therapist } from '@/lib/types';
 import { useApi } from '@/lib/use-api';
 
 export default function AppointmentScreen() {
@@ -17,8 +18,16 @@ export default function AppointmentScreen() {
   const c = useColors();
   const insets = useSafeAreaInsets();
   const { business } = useAuth();
-  const q = useApi<{ appointment: Appointment }>(`/api/appointments/${id}`);
+  const q = useApi<{ appointment: Appointment; events: AppointmentEvent[] }>(`/api/appointments/${id}`);
+  const team = useApi<{ therapists: Therapist[] }>('/api/therapists');
+  const rooms = useApi<{ rooms: Room[] }>('/api/rooms');
+  const services = useApi<{ services: Service[] }>('/api/services');
   const a = q.data?.appointment;
+  const names: NameLookup = {
+    therapist: (tid) => team.data?.therapists.find((t) => t.id === tid)?.name ?? null,
+    room: (rid) => rooms.data?.rooms.find((r) => r.id === rid)?.name ?? null,
+    service: (sid) => services.data?.services.find((x) => x.id === sid)?.name ?? null,
+  };
   const [notes, setNotes] = useState('');
   const [saving, setSaving] = useState<Status | 'notes' | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -33,7 +42,7 @@ export default function AppointmentScreen() {
     setSaving(what);
     setError(null);
     try {
-      const res = await api<{ appointment: Appointment }>(`/api/appointments/${a!.id}`, { method: 'PATCH', body: { status, internalNotes: notes } });
+      const res = await api<{ appointment: Appointment; events: AppointmentEvent[] }>(`/api/appointments/${a!.id}`, { method: 'PATCH', body: { status, internalNotes: notes } });
       q.setData(res);
       tap('success');
     } catch (e: any) {
@@ -44,12 +53,25 @@ export default function AppointmentScreen() {
   }
 
   const notesDirty = notes !== (a.internalNotes ?? '');
+  const move = () => router.push({ pathname: '/reschedule/[id]', params: { id: String(a.id) } });
   const phone = a.clientPhone?.replace(/[^\d+]/g, '');
 
   return (
     <KeyboardAvoidingView style={{ flex: 1, backgroundColor: c.bg }} behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={100}>
       <ScrollView contentContainerStyle={{ padding: space.lg, paddingBottom: space.xxl }} keyboardShouldPersistTaps="handled">
         <ErrorBanner message={error} />
+
+        {/* schedule problem (e.g. therapist went on time off after this was booked) */}
+        {a.issues?.length ? (
+          <View style={[styles.issue, { backgroundColor: c.dangerSoft }]}>
+            <Ionicons name="alert-circle" size={22} color={c.danger} />
+            <View style={{ flex: 1 }}>
+              <T v="bodyStrong" color={c.danger}>Needs attention</T>
+              {a.issues.map((i) => <T key={i.code} v="small" color={c.danger}>{i.message}</T>)}
+            </View>
+            <Button title="Fix" size="sm" kind="secondary" onPress={move} />
+          </View>
+        ) : null}
 
         {/* when & what */}
         <View style={styles.hero}>
@@ -67,6 +89,7 @@ export default function AppointmentScreen() {
 
         <Card style={{ marginTop: space.lg }} padded={false}>
           <Detail icon="person-circle-outline" label="Therapist" value={a.therapistName} />
+          {a.roomName ? <Detail icon="bed-outline" label="Room" value={a.roomName} /> : null}
           <Detail icon="hourglass-outline" label="Duration" value={duration(a.endMin - a.startMin)} />
           <Detail icon="pricetag-outline" label="Price" value={money(a.priceCents, business?.currency)} />
           <Detail icon={a.source === 'online' ? 'globe-outline' : 'call-outline'} label="Booked" value={a.source === 'online' ? 'Online' : 'By staff'} />
@@ -112,6 +135,13 @@ export default function AppointmentScreen() {
             style={[styles.notes, { backgroundColor: c.surface, borderColor: c.border, color: c.text }]}
           />
         </Section>
+
+        {/* history */}
+        <Section title="Activity">
+          <Card>
+            <ActivityTimeline events={q.data!.events ?? []} names={names} />
+          </Card>
+        </Section>
       </ScrollView>
 
       {/* actions */}
@@ -119,6 +149,7 @@ export default function AppointmentScreen() {
         {a.status === 'booked' ? (
           <>
             <View style={{ flexDirection: 'row', gap: space.sm }}>
+              <Button title="Move" icon="swap-horizontal" kind="secondary" size="md" style={{ flex: 1 }} onPress={move} />
               <Button title="No-show" kind="secondary" size="md" style={{ flex: 1 }} loading={saving === 'no_show'} onPress={() => update('no_show')} />
               <Button title="Cancel" kind="danger" size="md" style={{ flex: 1 }} loading={saving === 'cancelled'} onPress={() => update('cancelled')} />
             </View>
@@ -156,6 +187,7 @@ function Contact({ icon, label, onPress, disabled }: { icon: IconName; label: st
 
 const styles = StyleSheet.create({
   hero: { flexDirection: 'row', gap: space.lg, alignItems: 'center' },
+  issue: { flexDirection: 'row', alignItems: 'center', gap: space.md, padding: space.md, borderRadius: radius.lg, marginBottom: space.lg },
   dateBadge: { width: 80, height: 96, borderRadius: radius.lg, alignItems: 'center', justifyContent: 'center' },
   detail: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingHorizontal: space.lg, height: 52 },
   clientRow: { flexDirection: 'row', alignItems: 'center', gap: space.md },
