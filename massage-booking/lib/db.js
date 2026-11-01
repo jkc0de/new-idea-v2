@@ -106,13 +106,71 @@ CREATE TABLE IF NOT EXISTS appointments (
 );
 
 CREATE INDEX IF NOT EXISTS idx_appt_therapist_date ON appointments(therapist_id, date);
+
+-- Treatment rooms are inventory too: a booking needs a free therapist AND a free room.
+-- If a business has no rooms, room checks are skipped.
+CREATE TABLE IF NOT EXISTS rooms (
+  id INTEGER PRIMARY KEY,
+  business_id INTEGER NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  active INTEGER NOT NULL DEFAULT 1,
+  sort INTEGER NOT NULL DEFAULT 0
+);
+
+-- Services that can only happen in certain rooms (e.g. hot stone needs the stone room).
+-- A service with no rows here can use any room.
+CREATE TABLE IF NOT EXISTS service_rooms (
+  service_id INTEGER NOT NULL REFERENCES services(id) ON DELETE CASCADE,
+  room_id INTEGER NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
+  PRIMARY KEY (service_id, room_id)
+);
+
+-- Custom hours for one date. When a date has overrides they replace the weekly hours.
+CREATE TABLE IF NOT EXISTS schedule_overrides (
+  id INTEGER PRIMARY KEY,
+  therapist_id INTEGER NOT NULL REFERENCES therapists(id) ON DELETE CASCADE,
+  date TEXT NOT NULL,
+  start_min INTEGER NOT NULL,
+  end_min INTEGER NOT NULL CHECK (end_min > start_min),
+  note TEXT DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_override_therapist_date ON schedule_overrides(therapist_id, date);
+
+-- Everything that happens to a booking, for history and accountability.
+CREATE TABLE IF NOT EXISTS appointment_events (
+  id INTEGER PRIMARY KEY,
+  appointment_id INTEGER NOT NULL REFERENCES appointments(id) ON DELETE CASCADE,
+  at TEXT NOT NULL DEFAULT (datetime('now')),
+  actor TEXT NOT NULL,
+  type TEXT NOT NULL,
+  detail TEXT NOT NULL DEFAULT '{}'
+);
+CREATE INDEX IF NOT EXISTS idx_events_appt ON appointment_events(appointment_id);
 CREATE INDEX IF NOT EXISTS idx_appt_business_date ON appointments(business_id, date);
 `;
+
+// Columns added after the first release. Added in place so existing databases keep working.
+const COLUMNS = [
+  ['therapists', 'max_sessions_per_day', 'INTEGER'],          // null = no limit
+  ['therapists', 'max_consecutive_min', 'INTEGER'],           // null = no limit
+  ['therapists', 'min_break_min', 'INTEGER NOT NULL DEFAULT 30'],
+  ['appointments', 'room_id', 'INTEGER REFERENCES rooms(id)'],
+  ['appointments', 'updated_at', 'TEXT'],
+];
+
+function migrate(db) {
+  for (const [table, col, def] of COLUMNS) {
+    const has = db.prepare(`PRAGMA table_info(${table})`).all().some((c) => c.name === col);
+    if (!has) db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${def}`);
+  }
+  db.exec('CREATE INDEX IF NOT EXISTS idx_appt_room_date ON appointments(room_id, date)');
+}
 
 function openDb(file) {
   if (file !== ':memory:') fs.mkdirSync(path.dirname(file), { recursive: true });
   const db = new DatabaseSync(file);
   db.exec(SCHEMA);
+  migrate(db);
   return db;
 }
 

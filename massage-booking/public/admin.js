@@ -204,7 +204,15 @@ function newBookingModal({ date, client = {} } = {}) {
     if (!form.reportValidity()) return;
     act(save, m, async () => {
       const body = formData(form);
-      await api('/api/appointments', { method: 'POST', body: { ...body, serviceId: Number(body.serviceId), therapistId: Number(body.therapistId) } });
+      const payload = { ...body, serviceId: Number(body.serviceId), therapistId: Number(body.therapistId) };
+      try {
+        await api('/api/appointments', { method: 'POST', body: payload });
+      } catch (e) {
+        // Soft rule (outside hours, time off, limits): let staff knowingly book anyway.
+        if (e.status === 409 && e.data?.canOverride && confirm(`${e.message}.\n\nBook anyway?`)) {
+          await api('/api/appointments', { method: 'POST', body: { ...payload, override: true } });
+        } else throw e;
+      }
       m.close(); toast('Booking created'); ctx.scheduleDate = body.date; go(location.hash.slice(1) || 'schedule');
     });
   });

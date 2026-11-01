@@ -138,9 +138,14 @@ test('owner sets up a business and clients book online', async (t) => {
 
   // Staff booking outside working hours is allowed but still can't overlap.
   r = await owner('/api/appointments', { method: 'POST', body: { serviceId: svc.id, therapistId: b.id, date: '2026-11-02', time: '18:00', name: 'Late', email: 'late@example.com' } });
+  assert.equal(r.status, 409, 'outside hours needs explicit override');
+  assert.equal(r.body.canOverride, true);
+  assert.equal(r.body.issues[0].code, 'outside_hours');
+  r = await owner('/api/appointments', { method: 'POST', body: { serviceId: svc.id, therapistId: b.id, date: '2026-11-02', time: '18:00', name: 'Late', email: 'late@example.com', override: true } });
   assert.equal(r.status, 201);
-  r = await owner('/api/appointments', { method: 'POST', body: { serviceId: svc.id, therapistId: b.id, date: '2026-11-02', time: '18:30', name: 'Late2', email: 'late2@example.com' } });
-  assert.equal(r.status, 409);
+  r = await owner('/api/appointments', { method: 'POST', body: { serviceId: svc.id, therapistId: b.id, date: '2026-11-02', time: '18:30', name: 'Late2', email: 'late2@example.com', override: true } });
+  assert.equal(r.status, 409, 'override never allows double-booking');
+  assert.equal(r.body.canOverride, false);
 });
 
 test('businesses cannot see each other\'s data', async (t) => {
