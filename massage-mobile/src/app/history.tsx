@@ -83,11 +83,11 @@ export default function History() {
           {search ? <Pressable onPress={() => setSearch('')} hitSlop={8} accessibilityLabel="Clear search"><Ionicons name="close-circle" size={18} color={c.faint} /></Pressable> : null}
         </View>
       </View>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0 }} contentContainerStyle={styles.chips}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipScroll} contentContainerStyle={styles.chips}>
         {STATUS.map((s) => <Chip key={s.key || 'all'} label={s.label} selected={status === s.key} onPress={() => setStatus(s.key)} />)}
       </ScrollView>
       {(team.data?.therapists.length ?? 0) > 1 && (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0 }} contentContainerStyle={[styles.chips, { paddingTop: 0 }]}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipScroll} contentContainerStyle={[styles.chips, { paddingTop: 0 }]}>
           <Chip label="Everyone" icon="people-outline" selected={therapistId === null} onPress={() => setTherapistId(null)} />
           {team.data!.therapists.map((t) => <Chip key={t.id} label={t.name.split(' ')[0]} selected={therapistId === t.id} onPress={() => setTherapistId(therapistId === t.id ? null : t.id)} />)}
         </ScrollView>
@@ -133,7 +133,8 @@ export default function History() {
 
 const styles = StyleSheet.create({
   search: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingHorizontal: space.md, borderRadius: radius.md },
-  chips: { gap: space.sm, paddingHorizontal: space.lg, paddingVertical: space.md },
+  chipScroll: { flexGrow: 0, flexShrink: 0 },
+  chips: { gap: space.sm, paddingHorizontal: space.lg, paddingVertical: space.md, alignItems: 'center' },
   row: { flexDirection: 'row', alignItems: 'center', gap: space.md, padding: space.md, borderWidth: StyleSheet.hairlineWidth },
   first: { borderTopLeftRadius: radius.md, borderTopRightRadius: radius.md },
   last: { borderBottomLeftRadius: radius.md, borderBottomRightRadius: radius.md },

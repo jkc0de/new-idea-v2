@@ -60,7 +60,8 @@ export default function Insights() {
             <Card>
               <Bars
                 values={r.daily.map((d) => d.revenueCents)}
-                labels={r.daily.map((d, i) => (i === 0 || i === r.daily.length - 1 || (r.daily.length <= 7) ? fmtDate(d.date, r.daily.length <= 7 ? { weekday: 'short' } : { month: 'short', day: 'numeric' }) : null))}
+                labels={r.daily.length <= 7 ? r.daily.map((d) => fmtDate(d.date, { weekday: 'short' })) : undefined}
+                edgeLabels={r.daily.length > 7 ? [fmtDate(r.from, { month: 'short', day: 'numeric' }), fmtDate(r.to, { month: 'short', day: 'numeric' })] : undefined}
                 describe={(i) => `${fmtDate(r.daily[i].date)} · ${money(r.daily[i].revenueCents, cur)} · ${r.daily[i].sessions} sessions · ${pct(r.daily[i].utilization)} booked`}
               />
             </Card>
@@ -72,6 +73,7 @@ export default function Insights() {
               <Bars
                 height={70}
                 values={r.daily.map((d) => d.utilization)}
+                edgeLabels={r.daily.length > 7 ? [fmtDate(r.from, { month: 'short', day: 'numeric' }), fmtDate(r.to, { month: 'short', day: 'numeric' })] : undefined}
                 describe={(i) => `${fmtDate(r.daily[i].date)} · ${pct(r.daily[i].utilization)} of therapist time booked`}
               />
               <T v="small" color={c.faint} style={{ marginTop: space.sm }}>Booked massage time ÷ working time (after time off).</T>

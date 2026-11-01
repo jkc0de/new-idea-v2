@@ -11,8 +11,8 @@ import { T, tap } from './ui';
  */
 
 /** Vertical bars with tap-to-inspect. `label(i)` is shown above the chart for the selected bar. */
-export function Bars({ values, height = 120, labels, describe, highlightLast = false }: {
-  values: number[]; height?: number; labels?: (string | null)[]; describe: (i: number) => string; highlightLast?: boolean;
+export function Bars({ values, height = 120, labels, edgeLabels, describe, highlightLast = false }: {
+  values: number[]; height?: number; labels?: (string | null)[]; edgeLabels?: [string, string]; describe: (i: number) => string; highlightLast?: boolean;
 }) {
   const c = useColors();
   const [sel, setSel] = useState<number | null>(null);
@@ -40,6 +40,12 @@ export function Bars({ values, height = 120, labels, describe, highlightLast = f
         })}
       </View>
       <View style={[styles.axis, { borderTopColor: c.border }]} />
+      {edgeLabels && (
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+          <T v="caption" color={c.muted} style={{ fontWeight: '500', letterSpacing: 0 }}>{edgeLabels[0]}</T>
+          <T v="caption" color={c.muted} style={{ fontWeight: '500', letterSpacing: 0 }}>{edgeLabels[1]}</T>
+        </View>
+      )}
       {labels && (
         <View style={{ flexDirection: 'row', gap }}>
           {labels.map((l, i) => (

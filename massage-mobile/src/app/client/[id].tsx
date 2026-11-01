@@ -84,8 +84,8 @@ export default function ClientScreen() {
           ))}
         </View>
 
-        <Button title={rebook ? `Book again · ${rebook.serviceName.split(' – ')[0]} with ${rebook.therapistName.split(' ')[0]}` : 'Book an appointment'}
-          icon="add-circle" style={{ marginTop: space.md }} onPress={bookAgain} />
+        <Button title={rebook ? 'Book again' : 'Book an appointment'} icon="add-circle" style={{ marginTop: space.md }} onPress={bookAgain} />
+        {rebook && <T v="small" color={c.muted} center style={{ marginTop: 6 }}>{`Pre-filled: ${rebook.serviceName} with ${rebook.therapistName}`}</T>}
 
         <View style={styles.stats}>
           <Stat label="Visits" value={String(stats.visits)} />
