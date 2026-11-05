@@ -62,6 +62,13 @@ When schedules change (time off, new hours, therapist deactivated), affected boo
 - `GET /api/reports` — revenue, utilization, no-show/cancellation rates, new vs returning clients, top services, busiest days/hours
 - Client profiles: visits, spend, favourite therapist/service, typical rebooking interval, one-tap rebook
 
+## Staff notifications
+
+- In-app inbox + push to staff phones (via Expo's push service) when clients book, cancel or move online
+- Morning summary at each studio's chosen hour (checked every minute by `server.js`)
+- Per-studio settings: `GET/PUT /api/notifications/prefs`; phones register with `POST /api/push/devices`
+- Push failures never affect bookings; uninstalled phones are removed automatically
+
 ## How it works
 
 - `lib/scheduler.js` — the engine above
@@ -74,7 +81,7 @@ Config via env: `PORT`, `DB_FILE` (default `data/booking.db`), `SECURE_COOKIES=1
 
 ## Not built yet
 
-- Email/SMS confirmations and reminders (biggest gap — clients currently save their link manually)
+- Email/SMS confirmations and reminders for clients (staff get push alerts; clients don't have the app)
 - Online payments / deposits (Stripe)
 - Staff logins with their own permissions (one owner login per business today)
 - Waitlist and recurring bookings

@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CapacityStrip } from '@/components/sched-capacity';
 import { DayTimeline } from '@/components/sched-day-timeline';
+import { NotifyBell } from '@/components/notify-bell';
 import { Card, Chip, Empty, ErrorBanner, Fab, IconButton, Ionicons, Loading, Segmented, StatusPill, T, tap } from '@/components/ui';
 import { useAuth } from '@/lib/auth';
 import { addDays, duration, fmtDate, money, parseDate, relativeDay, time } from '@/lib/format';
@@ -99,7 +100,7 @@ export default function Today() {
             <T v="small" color={c.muted}>{greeting()}</T>
             <T v="title" numberOfLines={1}>{business?.name}</T>
           </View>
-          <IconButton icon="share-outline" label="Share booking link" onPress={() => router.push('/(owner)/more')} />
+          <NotifyBell />
         </View>
 
         {/* bookings that no longer fit someone's schedule */}

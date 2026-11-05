@@ -49,6 +49,18 @@ Demo login: `demo@serenity.test` / `demo1234` · Demo studio code: `serenity`
 **Clients**
 - Book in 4 steps; confirmation lets them **change time** or cancel within the studio's policy.
 
+## Push notifications
+
+Staff phones get alerts when **clients** book, cancel or move online (not for changes your team makes), plus an optional **morning summary** (today's bookings, first appointment, expected takings, anything needing attention). Everything also lands in the in-app inbox (bell on Today). Each type can be switched off under Studio → Notifications.
+
+To get real pushes on a phone:
+
+1. `npx eas-cli init` once — links the app to an Expo project (adds `extra.eas.projectId` to app.json).
+2. Build a development or store build (`npx eas-cli build --profile development`). Expo Go can't receive pushes on Android, and simulators can't receive them at all.
+3. Sign in on the phone and allow notifications. Use **Send a test notification** in settings to check.
+
+The server sends through Expo's push service (no keys needed for development). Phones that uninstall the app are cleaned up automatically.
+
 ## Code map
 
 ```

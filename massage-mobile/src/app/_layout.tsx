@@ -1,14 +1,49 @@
-import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
+import { DarkTheme, DefaultTheme, router, Stack, ThemeProvider } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
-import { useColorScheme } from 'react-native';
+import { Platform, useColorScheme } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
+import { api } from '@/lib/api';
 import { AuthProvider, useAuth } from '@/lib/auth';
+import { enablePush, Notifications } from '@/lib/push';
+import { storage } from '@/lib/storage';
 import { useColors } from '@/lib/theme';
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
+
+/**
+ * Signs this phone up for push once a studio is signed in (asks permission the first time only),
+ * and opens the right screen when a notification is tapped.
+ */
+function PushBridge() {
+  const { business } = useAuth();
+
+  useEffect(() => {
+    if (!business || Platform.OS === 'web') return;
+    (async () => {
+      const asked = await storage.get('pushAsked');
+      if (!asked) await storage.set('pushAsked', '1');
+      await enablePush({ prompt: !asked });
+    })().catch(() => {});
+  }, [business?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!business || Platform.OS === 'web') return;
+    const open = (data: any) => {
+      if (data?.notificationId) api('/api/notifications/read', { method: 'POST', body: { ids: [data.notificationId] } }).catch(() => {});
+      if (typeof data?.url === 'string') router.push(data.url as any);
+    };
+    // Tapped while the app was closed.
+    const last = Notifications.getLastNotificationResponse();
+    if (last) { open(last.notification.request.content.data); Notifications.clearLastNotificationResponse(); }
+    const sub = Notifications.addNotificationResponseReceivedListener((r) => open(r.notification.request.content.data));
+    return () => sub.remove();
+  }, [business?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  return null;
+}
 
 function RootStack() {
   const { ready } = useAuth();
@@ -16,6 +51,8 @@ function RootStack() {
   useEffect(() => { if (ready) SplashScreen.hideAsync().catch(() => {}); }, [ready]);
   if (!ready) return null;
   return (
+    <>
+    <PushBridge />
     <Stack
       screenOptions={{
         headerStyle: { backgroundColor: c.bg },
@@ -45,7 +82,10 @@ function RootStack() {
       <Stack.Screen name="insights" options={{ title: 'Insights' }} />
       <Stack.Screen name="conflicts" options={{ title: 'Needs attention' }} />
       <Stack.Screen name="history" options={{ title: 'Booking history' }} />
+      <Stack.Screen name="notifications" options={{ title: 'Notifications' }} />
+      <Stack.Screen name="notification-settings" options={{ title: 'Notification settings' }} />
     </Stack>
+    </>
   );
 }
 

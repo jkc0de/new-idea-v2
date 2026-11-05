@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 
 import { api, loadApiConfig, setToken } from './api';
+import { disablePush } from './push';
 import { storage } from './storage';
 import type { Business } from './types';
 
@@ -54,6 +55,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await finish(await api('/api/auth/signup', { method: 'POST', body: { businessName, email, password, timezone } }));
     },
     logout: async () => {
+      await disablePush();
       try { await api('/api/auth/logout', { method: 'POST' }); } catch { /* already logged out */ }
       await setToken(null);
       setBusiness(null);

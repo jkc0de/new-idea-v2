@@ -146,6 +146,29 @@ CREATE TABLE IF NOT EXISTS appointment_events (
   detail TEXT NOT NULL DEFAULT '{}'
 );
 CREATE INDEX IF NOT EXISTS idx_events_appt ON appointment_events(appointment_id);
+
+-- Staff phones that receive push notifications (Expo push tokens).
+CREATE TABLE IF NOT EXISTS push_devices (
+  id INTEGER PRIMARY KEY,
+  business_id INTEGER NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+  token TEXT NOT NULL UNIQUE,
+  platform TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  last_seen_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- In-app inbox. Every alert lands here, whether or not a push was sent.
+CREATE TABLE IF NOT EXISTS notifications (
+  id INTEGER PRIMARY KEY,
+  business_id INTEGER NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+  type TEXT NOT NULL,
+  title TEXT NOT NULL,
+  body TEXT NOT NULL,
+  data TEXT NOT NULL DEFAULT '{}',
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  read_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_notifications_business ON notifications(business_id, id);
 CREATE INDEX IF NOT EXISTS idx_appt_business_date ON appointments(business_id, date);
 `;
 
@@ -156,6 +179,8 @@ const COLUMNS = [
   ['therapists', 'min_break_min', 'INTEGER NOT NULL DEFAULT 30'],
   ['appointments', 'room_id', 'INTEGER REFERENCES rooms(id)'],
   ['appointments', 'updated_at', 'TEXT'],
+  ['businesses', 'notify_prefs', "TEXT NOT NULL DEFAULT '{}'"],
+  ['businesses', 'last_digest_date', 'TEXT'],
 ];
 
 function migrate(db) {

@@ -59,6 +59,8 @@ export default function Studio() {
           <Row left={<RowIcon icon="bed" />} title="Rooms" subtitle={activeRooms ? `${activeRooms} room${activeRooms === 1 ? '' : 's'} · never double-book a room` : 'Add treatment rooms'} onPress={() => router.push('/rooms')} />
           <Divider inset={space.lg + 36 + space.md} />
           <Row left={<RowIcon icon="options" />} title="Business settings" subtitle="Contact, booking rules, cancellation" onPress={() => router.push('/settings')} />
+          <Divider inset={space.lg + 36 + space.md} />
+          <Row left={<RowIcon icon="notifications" />} title="Notifications" subtitle="New bookings, cancellations, morning summary" onPress={() => router.push('/notification-settings')} />
         </Card>
       </Section>
 

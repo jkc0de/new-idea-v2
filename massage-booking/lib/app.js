@@ -4,6 +4,7 @@ const path = require('node:path');
 const { tx } = require('./db');
 const auth = require('./auth');
 const sched = require('./scheduler');
+const { createNotifier } = require('./notify');
 const { isValidDate, addDays, nowInZone, isValidTimeZone, minutesBetween, parseTime } = require('./time');
 
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
@@ -141,8 +142,20 @@ function createRouter() {
   return { add, match };
 }
 
-function createApp(db, { now = () => new Date(), secureCookies = false } = {}) {
+function createApp(db, { now = () => new Date(), secureCookies = false, pushSender, log } = {}) {
   const r = createRouter();
+  const notifier = createNotifier(db, { ...(pushSender ? { sender: pushSender } : {}), ...(log ? { log } : {}) });
+  const pending = new Set(); // in-flight pushes, so tests can wait for them
+
+  /** Fire a staff alert without slowing down or failing the request that caused it. */
+  function alertStaff(businessId, type, msg) {
+    const p = notifier.notify(businessId, type, msg).catch(() => {}).finally(() => pending.delete(p));
+    pending.add(p);
+  }
+
+  const dayLabel = (date) => new Date(date + 'T00:00:00Z').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' });
+  const t12 = (min) => { const h = Math.floor(min / 60) % 24; return `${h % 12 || 12}:${String(min % 60).padStart(2, '0')} ${h < 12 ? 'AM' : 'PM'}`; };
+  const when = (date, start) => `${dayLabel(date)} at ${t12(start)}`;
   const cookieFlags = `HttpOnly; SameSite=Lax; Path=/${secureCookies ? '; Secure' : ''}`;
 
   // ----- lookups scoped to a business (prevents cross-tenant access) -----
@@ -1055,6 +1068,11 @@ function createApp(db, { now = () => new Date(), secureCookies = false } = {}) {
       const v = sched.evaluate(ctx, { therapistId, service, start });
       return insertAppointment({ business: b, therapistId, roomId: v.roomId, service, date: body.date, start, client, clientNotes: str(body.notes, 1000), source: 'online' });
     });
+    alertStaff(b.id, 'new_booking', {
+      title: `New booking · ${when(appt.date, appt.start_min)}`,
+      body: `${appt.client_name} booked ${appt.service_name} with ${appt.therapist_name}.`,
+      data: { url: `/appointment/${appt.id}`, appointmentId: appt.id },
+    });
     return {
       status: 201,
       body: { appointment: apptOut(appt, { includePrivate: false }), manageToken: appt.manage_token, business: publicBusiness(b) },
@@ -1086,6 +1104,11 @@ function createApp(db, { now = () => new Date(), secureCookies = false } = {}) {
     if (!canClientChange(a, b)) throw new HttpError(409, a.status !== 'booked' ? 'This booking can no longer be cancelled' : cutoffMessage(b));
     db.prepare(`UPDATE appointments SET status = 'cancelled', updated_at = datetime('now') WHERE id = ?`).run(a.id);
     logEvent(a.id, 'client', 'status', { from: a.status, to: 'cancelled' });
+    alertStaff(b.id, 'cancelled', {
+      title: `Cancelled · ${when(a.date, a.start_min)}`,
+      body: `${a.client_name} cancelled ${a.service_name} with ${a.therapist_name}. That time is open again.`,
+      data: { url: `/appointment/${a.id}`, appointmentId: a.id },
+    });
     return { body: { ok: true } };
   });
 
@@ -1115,8 +1138,96 @@ function createApp(db, { now = () => new Date(), secureCookies = false } = {}) {
       });
       return db.prepare(`${APPT_SELECT} WHERE a.id = ?`).get(a.id);
     });
+    alertStaff(b.id, 'rescheduled', {
+      title: `Moved to ${when(updated.date, updated.start_min)}`,
+      body: `${updated.client_name} moved ${updated.service_name} from ${when(a.date, a.start_min)} (${a.therapist_name}) to ${updated.therapist_name}.`,
+      data: { url: `/appointment/${a.id}`, appointmentId: a.id },
+    });
     return { body: { appointment: apptOut(updated, { includePrivate: false }) } };
   });
+
+  // ===================== NOTIFICATIONS =====================
+  const notificationOut = (n) => ({ id: n.id, type: n.type, title: n.title, body: n.body, data: JSON.parse(n.data || '{}'), createdAt: n.created_at, read: !!n.read_at });
+
+  /** Register this phone for push. A token moves to whichever studio signed in on it last. */
+  r.add('POST', '/api/push/devices', async ({ business, body }) => {
+    const token = str(body.token, 300);
+    if (!notifier.isExpoToken(token)) throw bad('Invalid push token');
+    db.prepare(`INSERT INTO push_devices (business_id, token, platform) VALUES (?, ?, ?)
+      ON CONFLICT(token) DO UPDATE SET business_id = excluded.business_id, platform = excluded.platform, last_seen_at = datetime('now')`)
+      .run(business.id, token, str(body.platform, 20));
+    return { status: 201, body: { ok: true } };
+  }, { auth: true });
+
+  r.add('POST', '/api/push/devices/remove', async ({ business, body }) => {
+    db.prepare('DELETE FROM push_devices WHERE business_id = ? AND token = ?').run(business.id, str(body.token, 300));
+    return { body: { ok: true } };
+  }, { auth: true });
+
+  r.add('POST', '/api/push/test', async ({ business }) => {
+    const devices = db.prepare('SELECT COUNT(*) n FROM push_devices WHERE business_id = ?').get(business.id).n;
+    const result = await notifier.notify(business.id, 'test', { title: 'Notifications are on', body: `You'll get alerts for ${business.name} here.`, data: { url: '/notifications' } });
+    return { body: { devices, sent: result.sent, error: result.error || null } };
+  }, { auth: true });
+
+  r.add('GET', '/api/notifications', async ({ business, query }) => {
+    const limit = Math.min(Number(query.get('limit')) || 50, 200);
+    const before = Number(query.get('before')) || Number.MAX_SAFE_INTEGER;
+    const rows = db.prepare('SELECT * FROM notifications WHERE business_id = ? AND id < ? ORDER BY id DESC LIMIT ?').all(business.id, before, limit + 1);
+    const unread = db.prepare('SELECT COUNT(*) n FROM notifications WHERE business_id = ? AND read_at IS NULL').get(business.id).n;
+    return { body: { notifications: rows.slice(0, limit).map(notificationOut), unread, hasMore: rows.length > limit } };
+  }, { auth: true });
+
+  r.add('POST', '/api/notifications/read', async ({ business, body }) => {
+    if (Array.isArray(body.ids) && body.ids.length) {
+      const ids = body.ids.map(Number).filter(Number.isInteger).slice(0, 500);
+      db.prepare(`UPDATE notifications SET read_at = datetime('now') WHERE business_id = ? AND read_at IS NULL AND id IN (${ids.map(() => '?').join(',')})`).run(business.id, ...ids);
+    } else {
+      db.prepare(`UPDATE notifications SET read_at = datetime('now') WHERE business_id = ? AND read_at IS NULL`).run(business.id);
+    }
+    const unread = db.prepare('SELECT COUNT(*) n FROM notifications WHERE business_id = ? AND read_at IS NULL').get(business.id).n;
+    return { body: { unread } };
+  }, { auth: true });
+
+  r.add('GET', '/api/notifications/prefs', async ({ business }) => {
+    const devices = db.prepare('SELECT COUNT(*) n FROM push_devices WHERE business_id = ?').get(business.id).n;
+    return { body: { prefs: notifier.readPrefs(business), devices } };
+  }, { auth: true });
+
+  r.add('PUT', '/api/notifications/prefs', async ({ business, body }) => {
+    const prefs = notifier.cleanPrefs(body || {}, notifier.readPrefs(business));
+    db.prepare('UPDATE businesses SET notify_prefs = ? WHERE id = ?').run(JSON.stringify(prefs), business.id);
+    return { body: { prefs } };
+  }, { auth: true });
+
+  /**
+   * Morning summary. Call every minute; each studio gets one at its chosen local hour, once a day.
+   * Returns the ids of studios that were sent a summary.
+   */
+  async function runDigests(at = now()) {
+    const sent = [];
+    for (const b of db.prepare('SELECT * FROM businesses').all()) {
+      const prefs = notifier.readPrefs(b);
+      if (!prefs.digest) continue;
+      const local = nowInZone(b.timezone, at);
+      if (Math.floor(local.minutes / 60) !== prefs.digestHour || b.last_digest_date === local.date) continue;
+      db.prepare('UPDATE businesses SET last_digest_date = ? WHERE id = ?').run(local.date, b.id);
+      const appts = db.prepare(`SELECT a.start_min, a.price_cents FROM appointments a WHERE a.business_id = ? AND a.date = ? AND a.status = 'booked' ORDER BY a.start_min`).all(b.id, local.date);
+      const issues = futureConflicts(b).length;
+      const total = appts.reduce((n, a) => n + a.price_cents, 0);
+      const money = new Intl.NumberFormat('en-US', { style: 'currency', currency: b.currency, maximumFractionDigits: 0 }).format(total / 100);
+      const parts = appts.length
+        ? [`${appts.length} booking${appts.length === 1 ? '' : 's'}`, `first at ${t12(appts[0].start_min)}`, `${money} expected`]
+        : ['No bookings yet today'];
+      await notifier.notify(b.id, 'digest', {
+        title: `Today at ${b.name}`,
+        body: parts.join(' · ') + (issues ? `. ${issues} booking${issues === 1 ? ' needs' : 's need'} attention.` : '.'),
+        data: { url: issues ? '/conflicts' : '/' },
+      });
+      sent.push(b.id);
+    }
+    return sent;
+  }
 
   // ===================== PAGES =====================
   const pages = [
@@ -1126,7 +1237,7 @@ function createApp(db, { now = () => new Date(), secureCookies = false } = {}) {
     [/^\/b\/[^/]+\/manage\/?$/, 'manage.html'],
   ];
 
-  return async function handle(req, res) {
+  async function handle(req, res) {
     const url = new URL(req.url, 'http://localhost');
     const { pathname } = url;
     try {
@@ -1160,7 +1271,13 @@ function createApp(db, { now = () => new Date(), secureCookies = false } = {}) {
       console.error(err);
       send(res, 500, { error: 'Something went wrong' });
     }
-  };
+  }
+
+  handle.runDigests = runDigests;
+  handle.notifier = notifier;
+  /** Resolves once in-flight push sends finish (used by tests). */
+  handle.flush = () => Promise.all([...pending]);
+  return handle;
 }
 
 module.exports = { createApp };
