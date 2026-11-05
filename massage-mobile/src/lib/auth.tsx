@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 
 import { api, loadApiConfig, setToken } from './api';
+import { storage } from './storage';
 import type { Business } from './types';
 
 interface AuthState {
@@ -16,7 +17,12 @@ const AuthContext = createContext<AuthState | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [ready, setReady] = useState(false);
-  const [business, setBusiness] = useState<Business | null>(null);
+  const [business, setBusinessState] = useState<Business | null>(null);
+  // The sign-in screen greets staff with their studio's name.
+  const setBusiness = useCallback((b: Business | null) => {
+    setBusinessState(b);
+    if (b) storage.set('studioName', b.name).catch(() => {});
+  }, []);
 
   useEffect(() => {
     (async () => {
@@ -36,7 +42,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const finish = useCallback(async (res: { business: Business; token: string }) => {
     await setToken(res.token);
     setBusiness(res.business);
-  }, []);
+  }, [setBusiness]);
 
   const value = useMemo<AuthState>(() => ({
     ready,

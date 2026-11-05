@@ -1,15 +1,15 @@
 {
   "expo": {
-    "name": "Restful",
-    "slug": "restful-booking",
+    "name": "Studio Booking",
+    "slug": "studio-booking",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "restful",
+    "scheme": "studiobooking",
     "userInterfaceStyle": "automatic",
     "ios": {
       "icon": "./assets/expo.icon",
-      "bundleIdentifier": "com.restful.booking",
+      "bundleIdentifier": "com.studio.booking",
       "supportsTablet": false
     },
     "android": {
@@ -20,7 +20,7 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.restful.booking"
+      "package": "com.studio.booking"
     },
     "web": {
       "output": "single",

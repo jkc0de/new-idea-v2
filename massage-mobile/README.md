@@ -1,6 +1,8 @@
-# Restful — Mobile App (Expo / React Native)
+# Studio Booking — Staff App (Expo / React Native)
 
-Phone app for the massage booking system. One app, two sides:
+The studio's own staff app for the massage booking system. It carries the studio's name, not a platform brand: set `APP_NAME` and `APP_ID` when building (see `app.config.js`). Clients don't need the app — they book through the studio's web link.
+
+What staff can do:
 
 - **Studio owners** — Today agenda, bookings, clients, team, services, settings
 - **Clients** — book a massage in 4 taps, then view or cancel

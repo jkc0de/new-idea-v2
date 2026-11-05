@@ -1,4 +1,4 @@
-# Restful — Massage Therapist Booking
+# Massage Studio Booking
 
 Online booking for massage studios. Each business gets a public booking page for clients and a dashboard for running the day.
 

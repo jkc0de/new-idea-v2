@@ -490,6 +490,7 @@ async function renderSettings() {
 function setBusiness(b) {
   ctx.business = b;
   document.getElementById('biz-name').textContent = b.name;
+  document.title = `${b.name} — Dashboard`;
   document.getElementById('view-page').href = `/b/${b.slug}`;
 }
 
